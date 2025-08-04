@@ -1,0 +1,77 @@
+name: Deploy to ECR
+
+on:
+  push:
+    branches:
+      - main  # 또는 배포할 브랜치
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: sangyoon
+  IMAGE_TAG: latest
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 소스 코드 체크아웃
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 2. Java 설정
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'  # 필요한 버전
+
+      # 3. Gradle 캐시 설정 (선택)
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # 4. Gradle 빌드
+      - name: Gradle build
+        run: ./gradlew clean build
+
+      # 5. AWS 인증
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # 6. ECR 로그인
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 7. Docker 이미지 빌드 및 태깅
+      - name: Build, tag, and push image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          IMAGE_URI=${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+          echo "::set-output name=image_uri::$IMAGE_URI"
+
+      # 8. imagedefinitions.json 생성 (ECS 사용 시 필요)
+      - name: Generate imagedefinitions.json
+        run: |
+          echo '[{"name":"sangyoon-ecr","imageUri":"'"${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"'"}]' > imagedefinitions.json
+
+      # 9. 아티팩트 업로드 (선택, ECS에 전달하려면 필요)
+      - name: Upload imagedefinitions.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: imagedefinitions
+          path: imagedefinitions.json
