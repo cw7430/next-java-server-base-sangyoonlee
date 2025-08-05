@@ -65,22 +65,19 @@ jobs:
           echo "::set-output name=image_uri::$IMAGE_URI"
 
       # 8. imagedefinitions.json 생성 (ECS 사용 시 필요)
-      - name: Generate imagedefinitions.json
-        run: |
-          echo '[{"name":"sangyoon-ecr","imageUri":"'"${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}"'"}]' > imagedefinitions.json
-
-      # 9. 아티팩트 업로드 (선택, ECS에 전달하려면 필요)
-      - name: Upload imagedefinitions.json
-        uses: actions/upload-artifact@v4
+      - name: Render Amazon ECS task definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          name: imagedefinitions
-          path: imagedefinitions.json
+          task-definition: ecs/task-definition.json
+          container-name: sangyoon-ecr
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
 
       # 10. ECS 서비스 업데이트
       - name: Deploy to Amazon ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
-          task-definition: imagedefinitions.json
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
           service: sangyoon-service
           cluster: next-second-cluster
           wait-for-service-stability: true
