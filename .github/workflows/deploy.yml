@@ -75,3 +75,12 @@ jobs:
         with:
           name: imagedefinitions
           path: imagedefinitions.json
+
+      # 10. ECS 서비스 업데이트
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: imagedefinitions.json
+          service: sangyoon-service
+          cluster: next-second-cluster
+          wait-for-service-stability: true
